@@ -1,8 +1,9 @@
-use std::collections::HashMap;
 use std::error::Error;
-use actix_web::{get, post, web, App, HttpRequest, HttpResponse, HttpServer, Responder};
+use actix_web::{get, post, web, App, HttpResponse, HttpServer, Responder};
 use dotenv::dotenv;
+use reqwest::Client;
 use serde::{Deserialize, Serialize};
+use serde_json::json;
 
 #[derive(Deserialize, Serialize)]
 struct TokenResponse {
@@ -53,8 +54,53 @@ async fn fetch_auth_token(req: String) -> impl Responder {
             }
         },
         Err(e) => {
-            HttpResponse::InternalServerError().body("Failed to fetch token")
+            HttpResponse::InternalServerError().body(format!("{e}"))
         }
+    }
+}
+
+#[post("api/fetch_user")]
+async fn fetch_user(req: String) -> impl Responder {
+    let query = "query ($userName: String) {
+      MediaListCollection(userName: $userName, type: ANIME) {
+        lists {
+          name
+          entries {
+            media {
+              id
+              title {
+                romaji
+                english
+              }
+              format
+              status
+            }
+            score
+            progress
+            status
+          }
+        }
+      }
+    }";
+    let client = Client::new();
+
+    let json = json!({"query": query, "variables": {"userName": req.clone()}});
+
+    let resp = client.post("https://graphql.anilist.co/")
+        .header("Content-Type", "application/json")
+        .header("Accept", "application/json")
+        .body(json.to_string())
+        .send()
+        .await
+        .unwrap()
+        .text()
+        .await;
+
+    println!("{:?}", resp);
+
+    match resp {
+        Ok(r) => HttpResponse::Ok().json(r),
+        Err(_) => HttpResponse::InternalServerError().body("Failed to find user")
     }
 }
 
@@ -65,6 +111,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
             .service(hello)
             .service(echo)
             .service(fetch_auth_token)
+            .service(fetch_user)
             .route("/hey", web::get().to(manual_hello))
     });
 
