@@ -5,6 +5,8 @@ edition = "2021"
 
 [dependencies]
 actix-web = "4.9.0"
+diesel = { version = "2.2.9", features = ["mysql"]}
+mysqlclient-sys = { version = "0.4", features = ["bundled"] }
 reqwest = { version = "0.12", features = ["json"] }
 dotenv = "0.15.0"
 serde = { version = "1.0.217", features = ["derive"] }

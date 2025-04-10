@@ -1,9 +1,24 @@
+use std::env;
 use std::error::Error;
+use std::sync::Mutex;
+use diesel::prelude::*;
 use actix_web::{get, post, web, App, HttpResponse, HttpServer, Responder};
 use dotenv::dotenv;
 use reqwest::Client;
 use serde::{Deserialize, Serialize};
 use serde_json::json;
+use damq_backend::create_user;
+
+struct AppState {
+    conn: Mutex<MysqlConnection>
+}
+
+fn establish_connection() -> MysqlConnection {
+    let db_url = env::var("DATABASE_URL").expect("DATABASE_URL must be set");
+
+   MysqlConnection::establish(&db_url)
+        .unwrap_or_else(|_| panic!("Error connecting to {}", db_url))
+}
 
 #[derive(Deserialize, Serialize)]
 struct TokenResponse {
@@ -24,7 +39,7 @@ async fn manual_hello() -> impl Responder {
     HttpResponse::Ok().body("prout")
 }
 
-#[post("/api/token")]
+#[post("/token")]
 async fn fetch_auth_token(req: String) -> impl Responder {
     println!("Incoming fetch with body {req}");
     dotenv().ok();
@@ -59,8 +74,12 @@ async fn fetch_auth_token(req: String) -> impl Responder {
     }
 }
 
-#[post("api/fetch_user")]
-async fn fetch_user(req: String) -> impl Responder {
+#[post("/fetch_user")]
+async fn fetch_user(req: String, data: web::Data<AppState>) -> impl Responder {
+    let mut conn = data.conn.lock().unwrap();
+
+    create_user(&mut conn, 266, "yatss");
+
     let query = "query ($userName: String) {
       MediaListCollection(userName: $userName, type: ANIME) {
         lists {
@@ -99,19 +118,35 @@ async fn fetch_user(req: String) -> impl Responder {
     println!("{:?}", resp);
 
     match resp {
-        Ok(r) => HttpResponse::Ok().json(r),
-        Err(_) => HttpResponse::InternalServerError().body("Failed to find user")
+        Ok(r) => {
+            HttpResponse::Ok().body("")
+        },
+        Err(e) => HttpResponse::InternalServerError().body(format!("Error: {e}"))
     }
+}
+
+#[post("/test_user")]
+async fn test_user() -> impl Responder {
+    HttpResponse::Ok()
 }
 
 #[actix_web::main]
 async fn main() -> Result<(), Box<dyn Error>> {
+    dotenv().ok();
+
     let server = HttpServer::new(|| {
         App::new()
+            .app_data(web::Data::new(AppState {
+                conn: Mutex::from(establish_connection())
+            }))
             .service(hello)
             .service(echo)
-            .service(fetch_auth_token)
-            .service(fetch_user)
+            .service(
+                web::scope("/api")
+                    .service(fetch_auth_token)
+                    .service(fetch_user)
+                    .service(test_user)
+            )
             .route("/hey", web::get().to(manual_hello))
     });
 
