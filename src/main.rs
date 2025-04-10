@@ -7,7 +7,7 @@ use dotenv::dotenv;
 use reqwest::Client;
 use serde::{Deserialize, Serialize};
 use serde_json::json;
-use damq_backend::create_user;
+use damq_backend::models::users::{create_user, get_user};
 
 struct AppState {
     conn: Mutex<MysqlConnection>
@@ -75,11 +75,7 @@ async fn fetch_auth_token(req: String) -> impl Responder {
 }
 
 #[post("/fetch_user")]
-async fn fetch_user(req: String, data: web::Data<AppState>) -> impl Responder {
-    let mut conn = data.conn.lock().unwrap();
-
-    create_user(&mut conn, 266, "yatss");
-
+async fn fetch_user(req: String) -> impl Responder {
     let query = "query ($userName: String) {
       MediaListCollection(userName: $userName, type: ANIME) {
         lists {
@@ -125,8 +121,20 @@ async fn fetch_user(req: String, data: web::Data<AppState>) -> impl Responder {
     }
 }
 
-#[post("/test_user")]
-async fn test_user() -> impl Responder {
+#[post("/fetch_user_db")]
+async fn fetch_user_db(req: String, data: web::Data<AppState>) -> impl Responder {
+    let user_id = req.clone().parse::<i64>().unwrap();
+    let mut conn = data.conn.lock().unwrap();
+
+    let user = get_user(&mut conn, user_id);
+
+    match user {
+        Some(u) => {
+            println!("{}", u.discord_id);
+        }
+        None => println!("no corresponding user")
+    }
+
     HttpResponse::Ok()
 }
 
@@ -145,7 +153,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
                 web::scope("/api")
                     .service(fetch_auth_token)
                     .service(fetch_user)
-                    .service(test_user)
+                    .service(fetch_user_db)
             )
             .route("/hey", web::get().to(manual_hello))
     });
