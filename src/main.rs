@@ -7,7 +7,7 @@ use dotenv::dotenv;
 use reqwest::Client;
 use serde::{Deserialize, Serialize};
 use serde_json::json;
-use damq_backend::models::users::{create_user, get_user};
+use damq_backend::models::users::{get_user};
 
 struct AppState {
     conn: Mutex<MysqlConnection>
@@ -114,7 +114,7 @@ async fn fetch_user(req: String) -> impl Responder {
     println!("{:?}", resp);
 
     match resp {
-        Ok(r) => {
+        Ok(_) => {
             HttpResponse::Ok().body("")
         },
         Err(e) => HttpResponse::InternalServerError().body(format!("Error: {e}"))
