@@ -427,6 +427,7 @@ dependencies = [
  "actix-web",
  "diesel",
  "dotenv",
+ "log",
  "mysqlclient-sys",
  "reqwest",
  "serde",

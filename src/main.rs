@@ -6,8 +6,9 @@ use actix_web::{get, post, web, App, HttpResponse, HttpServer, Responder};
 use dotenv::dotenv;
 use reqwest::Client;
 use serde::{Deserialize, Serialize};
-use serde_json::json;
-use damq_backend::models::users::{get_user};
+use serde_json::{json, Value};
+use serde_json::Value::Null;
+use damq_backend::models::users::{create_user, get_user};
 
 struct AppState {
     conn: Mutex<MysqlConnection>
@@ -75,7 +76,7 @@ async fn fetch_auth_token(req: String) -> impl Responder {
 }
 
 #[post("/fetch_user")]
-async fn fetch_user(req: String) -> impl Responder {
+async fn fetch_user(req: String, data: web::Data<AppState>) -> impl Responder {
     let query = "query ($userName: String) {
       MediaListCollection(userName: $userName, type: ANIME) {
         lists {
@@ -98,8 +99,13 @@ async fn fetch_user(req: String) -> impl Responder {
       }
     }";
     let client = Client::new();
+    let mut conn = data.conn.lock().unwrap();
 
-    let json = json!({"query": query, "variables": {"userName": req.clone()}});
+    let user_body: Value = serde_json::from_str(&req.clone()).unwrap();
+    let id = user_body["discord_id"].as_str().unwrap().parse::<i64>().unwrap();
+
+    let json = json!({"query": query,
+        "variables": {"userName": user_body["anilist_username"].as_str().unwrap()}});
 
     let resp = client.post("https://graphql.anilist.co/")
         .header("Content-Type", "application/json")
@@ -111,11 +117,18 @@ async fn fetch_user(req: String) -> impl Responder {
         .text()
         .await;
 
-    println!("{:?}", resp);
-
     match resp {
-        Ok(_) => {
-            HttpResponse::Ok().body("")
+        Ok(resp_string) => {
+            let resp_json: Value = serde_json::from_str(resp_string.as_str()).unwrap();
+            if resp_json["errors"] == Null {
+                create_user(&mut conn,
+                            id,
+                            user_body["anilist_username"].as_str().unwrap());
+                HttpResponse::Ok().body("User found")
+            } else {
+                HttpResponse::Ok().body("User not found")
+            }
+
         },
         Err(e) => HttpResponse::InternalServerError().body(format!("Error: {e}"))
     }
@@ -131,11 +144,13 @@ async fn fetch_user_db(req: String, data: web::Data<AppState>) -> impl Responder
     match user {
         Some(u) => {
             println!("{}", u.discord_id);
+            HttpResponse::Ok().body("User found")
         }
-        None => println!("no corresponding user")
+        None => {
+            println!("no corresponding user");
+            HttpResponse::Ok().body("User not found")
+        }
     }
-
-    HttpResponse::Ok()
 }
 
 #[actix_web::main]
