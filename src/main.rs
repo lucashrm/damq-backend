@@ -11,13 +11,13 @@ use serde_json::Value::Null;
 use damq_backend::models::users::{create_user, get_user};
 
 struct AppState {
-    conn: Mutex<MysqlConnection>
+    conn: Mutex<PgConnection>
 }
 
-fn establish_connection() -> MysqlConnection {
+fn establish_connection() -> PgConnection {
     let db_url = env::var("DATABASE_URL").expect("DATABASE_URL must be set");
 
-   MysqlConnection::establish(&db_url)
+   PgConnection::establish(&db_url)
         .unwrap_or_else(|_| panic!("Error connecting to {}", db_url))
 }
 
@@ -44,8 +44,8 @@ async fn manual_hello() -> impl Responder {
 async fn fetch_auth_token(req: String) -> impl Responder {
     println!("Incoming fetch with body {req}");
     dotenv().ok();
-    let client_id = std::env::var("VITE_DISCORD_CLIENT_ID").expect("VITE_DISCORD_CLIENT_ID must be set");
-    let client_secret = std::env::var("DISCORD_CLIENT_SECRET").expect("Discord secret must be set");
+    let client_id = env::var("VITE_DISCORD_CLIENT_ID").expect("VITE_DISCORD_CLIENT_ID must be set");
+    let client_secret = env::var("DISCORD_CLIENT_SECRET").expect("Discord secret must be set");
 
     let params = [
         ("client_id", client_id),
@@ -56,7 +56,7 @@ async fn fetch_auth_token(req: String) -> impl Responder {
 
     println!("{params:?}");
 
-    let client = reqwest::Client::new();
+    let client = Client::new();
     let response = client.post("https://discord.com/api/oauth2/token")
         .form(&params)
         .send()
